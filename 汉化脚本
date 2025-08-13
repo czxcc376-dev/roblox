@@ -69,11 +69,11 @@ local function buildGui()
         return btn
     end
 
-    btnAuto = mk("Auto Walk: OFF", 10)
-    btnNoclip = mk("Noclip: OFF", 60)
-    btnSpider = mk("🕷 Spider‑Man Mode", 110)
-    local btnWebPull = mk("Web Pull: OFF", 160)
-    local btnWebPhys = mk("Web Physics: OFF", 210)
+    btnAuto = mk("自动到达 OFF", 10)
+    btnNoclip = mk("穿墙OFF", 60)
+    btnSpider = mk("🕷 蜘蛛模式 ", 110)
+    local btnWebPull = mk("发射蛛丝快速到达OFF", 160)
+    local btnWebPhys = mk("发射蛛丝正常到达OFF", 210)
 
     subButtons = {btnWebPull, btnWebPhys}
     for _, b in ipairs(subButtons) do
@@ -89,27 +89,27 @@ local function buildGui()
 
     btnAuto.MouseButton1Click:Connect(function()
         autoPull = not autoPull
-        btnAuto.Text = "Auto Walk: " .. (autoPull and "ON" or "OFF")
+        btnAuto.Text = "自动到达" .. (autoPull and "ON" or "OFF")
         btnAuto.BackgroundColor3 = autoPull and Color3.fromRGB(0, 120, 255) or Color3.fromRGB(70, 70, 70)
     end)
 
     btnNoclip.MouseButton1Click:Connect(function()
         noclip = not noclip
-        btnNoclip.Text = "Noclip: " .. (noclip and "ON" or "OFF")
+        btnNoclip.Text = "穿墙" .. (noclip and "ON" or "OFF")
     end)
 
     btnWebPull.MouseButton1Click:Connect(function()
         webPhysics = false
         autoPull = true
-        btnWebPull.Text = "Web Pull: ON"
-        btnWebPhys.Text = "Web Physics: OFF"
+        btnWebPull.Text = "发射蛛丝快速到达ON"
+        btnWebPhys.Text = "发射蛛丝正常到达OFF"
     end)
 
     btnWebPhys.MouseButton1Click:Connect(function()
         webPhysics = true
         autoPull = false
-        btnWebPhys.Text = "Web Physics: ON"
-        btnWebPull.Text = "Web Pull: OFF"
+        btnWebPhys.Text = "发射蛛丝正常到达ON"
+        btnWebPull.Text = "发射蛛丝快速到达OFF"
     end)
 end
 
