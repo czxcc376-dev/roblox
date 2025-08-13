@@ -1190,6 +1190,41 @@ local SKILL2FRAME = CreateFrame(WEAPONGUI, 1, 2, UD2(0.5, 0, 0.8, 0), UD2(0.26, 
 local SKILL3FRAME = CreateFrame(WEAPONGUI, 1, 2, UD2(0.23, 0, 0.93, 0), UD2(0.26, 0, 0.07, 0), C3(0, 0, 0), C3(0, 0, 0), "Skill 3 Frame")
 local SKILL4FRAME = CreateFrame(WEAPONGUI, 1, 2, UD2(0.5, 0, 0.93, 0), UD2(0.26, 0, 0.07, 0), C3(0, 0, 0), C3(0, 0, 0), "Skill 4 Frame")
 local SKILL5FRAME = CreateFrame(WEAPONGUI, 1, 2, UD2(0.365, 0, 0.7, 0), UD2(0.26, 0, 0.07, 0), C3(0, 0, 0), C3(0, 0, 0), "Skill 5 Frame")
+-- 假设你的主 UI 框架是放在 ScreenGui 下的某个 Frame，这里先获取或创建相关容器
+local screenGui = game.Players.LocalPlayer:WaitForChild("PlayerGui"):WaitForChild("你的GUI名称") -- 替换成实际 GUI 名称
+local mainFrame = screenGui:WaitForChild("主框架名称") -- 替换成实际承载按钮列表的框架名称
+
+-- 创建 ScrollingFrame
+local scrollingFrame = Instance.new("ScrollingFrame")
+scrollingFrame.Name = "ScrollingFrame"
+scrollingFrame.Parent = mainFrame
+scrollingFrame.Size = UDim2.new(1, 0, 1, 0) -- 填满父框架，可根据需求调整
+scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0) -- 初始画布大小，后续根据内容调整
+scrollingFrame.ScrollBarThickness = 8 -- 设置滚动条粗细
+
+-- 将原来的按钮列表移动到 ScrollingFrame 中（假设原来按钮都在 mainFrame 直接子级）
+for _, child in ipairs(mainFrame:GetChildren()) do
+    if child:IsA("TextButton") then -- 假设是文本按钮，可根据实际控件类型调整
+        child.Parent = scrollingFrame
+    end
+end
+
+-- 辅助函数：更新 CanvasSize 以适配内容高度
+local function updateCanvasSize()
+    local contentHeight = 0
+    for _, child in ipairs(scrollingFrame:GetChildren()) do
+        contentHeight = contentHeight + child.AbsoluteSize.Y
+    end
+    scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, contentHeight + 10) -- 加 10 避免贴边
+end
+
+-- 监听子控件添加和大小变化来更新画布大小（可根据实际需求完善，比如按钮点击后有大小变化也可触发）
+scrollingFrame.ChildAdded:Connect(updateCanvasSize)
+scrollingFrame.ChildRemoved:Connect(updateCanvasSize)
+for _, child in ipairs(scrollingFrame:GetChildren()) do
+    child:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateCanvasSize)
+end
+
 local SKILL1TEXT = CreateLabel(SKILL1FRAME, "[Z] Banisher bullet", SKILLTEXTCOLOR, 8, "Antique", 0, 2, 1, "Text 1")
 local SKILL2TEXT = CreateLabel(SKILL2FRAME, "[B] Banishing rampage", SKILLTEXTCOLOR, 8, "Antique", 0, 2, 1, "Text 2")
 local SKILL3TEXT = CreateLabel(SKILL3FRAME, "[C] Warp vector", SKILLTEXTCOLOR, 8, "Antique", 0, 2, 1, "Text 3")
