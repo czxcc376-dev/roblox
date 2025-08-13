@@ -98,7 +98,7 @@ end
 -- Marah saat mati + respawn
 local function connectDeathEvents(npc)
     npc:WaitForChild("Humanoid").Died:Connect(function()
-        warn(npc.Name.." MATI! DIA NGAMUK!")
+        warn(npc.Name.."去死吧！他很愤怒！")
 
         local chat = Instance.new("BillboardGui", npc)
         chat.Size = UDim2.new(0, 200, 0, 50)
@@ -131,7 +131,7 @@ local function connectDeathEvents(npc)
                 connectDeathEvents(dummy)
             end)
         else
-            warn("Game ini tidak support respawn NPC.")
+            warn(″警告本游戏不支持NPC重生.")
         end
     end)
 end
@@ -147,7 +147,7 @@ end)
 textbox.FocusLost:Connect(function(enterPressed)
     if enterPressed and dummy then
         print("You: "..textbox.Text)
-        print(dummy.Name..": Lah lu bilang '"..textbox.Text.."' ke gw? elu aneh anj.")
+        print(dummy.Name..": Lah lu bilang '"..textbox.Text.."'你刚刚对我说了什么？这很奇怪.")
         textbox.Text = ""
     end
 end)
