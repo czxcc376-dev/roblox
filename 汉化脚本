@@ -33,7 +33,7 @@ spawnButton.TextScaled = true
 local textbox = Instance.new("TextBox", frame)
 textbox.Size = UDim2.new(1, -20, 0, 30)
 textbox.Position = UDim2.new(0, 10, 0, 50)
-textbox.PlaceholderText = "Chat with dummy..."
+textbox.PlaceholderText = "和假人聊天"
 textbox.Text = ""
 textbox.TextScaled = true
 textbox.ClearTextOnFocus = false
@@ -41,7 +41,7 @@ textbox.ClearTextOnFocus = false
 local followToggle = Instance.new("TextButton", frame)
 followToggle.Size = UDim2.new(1, -20, 0, 30)
 followToggle.Position = UDim2.new(0, 10, 0, 90)
-followToggle.Text = "跟随已关闭"
+followToggle.Text = "Follow: OFF"
 followToggle.BackgroundColor3 = Color3.fromRGB(200, 80, 80)
 followToggle.TextColor3 = Color3.new(1,1,1)
 followToggle.Font = Enum.Font.SourceSansBold
@@ -159,7 +159,7 @@ followToggle.MouseButton1Click:Connect(function()
         followToggle.Text = "跟随已开启"
         followToggle.BackgroundColor3 = Color3.fromRGB(80, 200, 80)
     else
-        followToggle.Text = "Follow: OFF"
+        followToggle.Text = "跟随已关闭"
         followToggle.BackgroundColor3 = Color3.fromRGB(200, 80, 80)
     end
 end)
