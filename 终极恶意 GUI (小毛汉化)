@@ -248,6 +248,57 @@ kohls.TextXAlignment = Enum.TextXAlignment.Left
 
 UICorner_3.Parent = kohls
 
+-- 新增滑动UI按钮
+local SlideButton = Instance.new("TextButton")
+local SlideButtonCorner = Instance.new("UICorner")
+
+-- 设置按钮属性
+SlideButton.Name = "滑动UI"
+SlideButton.Parent = ScrollingFrame -- 放入滚动容器
+SlideButton.BackgroundColor3 = Color3.fromRGB(75, 175, 255) -- 蓝色系区分
+SlideButton.Position = UDim2.new(0.0093457941, 0, 0.0275743196, 0) -- 调整位置避免重叠
+SlideButton.Size = UDim2.new(0, 419, 0, 36)
+SlideButton.Font = Enum.Font.SourceSansBold
+SlideButton.Text = "    滑动控制"
+SlideButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+SlideButton.TextSize = 20.000
+SlideButton.TextWrapped = true
+SlideButton.TextXAlignment = Enum.TextXAlignment.Left
+
+-- 滑动逻辑
+local isDragging = false
+local startPos = Vector2.new()
+
+SlideButton.MouseButton1Down:Connect(function()
+    isDragging = true
+    startPos = Main.Position -- 记录初始位置
+    local mousePos = game:GetService("UserInputService"):GetMouseLocation()
+
+    local moveConnection = game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            -- 计算鼠标偏移并更新UI位置
+            local delta = input.Position - mousePos
+            Main.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    -- 停止拖动
+    game:GetService("UserInputService").InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = false
+            moveConnection:Disconnect()
+        end
+    end)
+end)
+
+-- 添加圆角
+SlideButtonCorner.Parent = SlideButton
+
 Cleetus.Name = "Cleetus"
 Cleetus.Parent = ScrollingFrame
 Cleetus.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
