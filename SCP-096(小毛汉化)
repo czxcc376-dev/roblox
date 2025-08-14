@@ -1,0 +1,321 @@
+-- Script by Rufus14
+-- Modified by ban_thid
+local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+local RunService = game:GetService("RunService")
+
+local warningGui = Instance.new("ScreenGui")
+warningGui.Name = "SCPWarningGui"
+warningGui.ResetOnSpawn = false
+warningGui.Parent = PlayerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 400, 0, 200)
+frame.Position = UDim2.new(0.5, -200, 0.5, -100)
+frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+frame.BorderSizePixel = 0
+frame.Parent = warningGui
+
+local textLabel = Instance.new("TextLabel")
+textLabel.Size = UDim2.new(1, -20, 0, 100)
+textLabel.Position = UDim2.new(0, 10, 0, 10)
+textLabel.BackgroundTransparency = 1
+textLabel.Text = "此脚本在某些游戏中可能无法正常工作，您确定要执行此脚本吗？（SCP 无法删除）[任何人都可以触发 SCP，因此请小心执行此操作的位置]"
+textLabel.TextColor3 = Color3.new(1,1,1)
+textLabel.TextWrapped = true
+textLabel.Font = Enum.Font.SourceSansBold
+textLabel.TextSize = 18
+textLabel.Parent = frame
+
+local executeBtn = Instance.new("TextButton")
+executeBtn.Size = UDim2.new(0.4, 0, 0, 50)
+executeBtn.Position = UDim2.new(0.05, 0, 0.75, 0)
+executeBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+executeBtn.Text = "执行"
+executeBtn.TextColor3 = Color3.new(1,1,1)
+executeBtn.Font = Enum.Font.SourceSansBold
+executeBtn.TextSize = 20
+executeBtn.Parent = frame
+
+local noBtn = Instance.new("TextButton")
+noBtn.Size = UDim2.new(0.4, 0, 0, 50)
+noBtn.Position = UDim2.new(0.55, 0, 0.75, 0)
+noBtn.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+noBtn.Text = "呃，我改变主意了"
+noBtn.TextColor3 = Color3.new(1,1,1)
+noBtn.Font = Enum.Font.SourceSansBold
+noBtn.TextSize = 20
+noBtn.Parent = frame
+
+local function runSCP()
+    warningGui:Destroy()
+
+    loadstring(game:HttpGet("https://pastebin.com/raw/B9JDaVSg"))()
+
+    local Lighting = game:GetService("Lighting")
+    local RunService = game:GetService("RunService")
+
+    local Character = Player.Character or Player.CharacterAdded:Wait()
+    local Camera = workspace.CurrentCamera
+
+    local function findSCP()
+        for _ = 1, 60 do
+            local scp = workspace:FindFirstChild("SCP-096")
+            if scp then return scp end
+            task.wait(1)
+        end
+        return nil
+    end
+
+    local SCP = findSCP()
+    if not SCP then
+        warn("SCP-096 not found :( [not needed anymore]")
+        return
+    end
+
+local function setupFaceChangeOnTouch(SCP)
+    local facePart = SCP:FindFirstChild("facepart")
+    if not facePart then return end
+    local face = facePart:FindFirstChild("face")
+    if not face or not face:IsA("Decal") then return end
+
+    local faceCycleCoroutine
+
+    local function startFaceCycle()
+        if faceCycleCoroutine and coroutine.status(faceCycleCoroutine) ~= "dead" then
+            coroutine.close(faceCycleCoroutine)
+        end
+
+        faceCycleCoroutine = coroutine.create(function()
+            task.wait(0.5)
+            if face then
+                face.Texture = "http://www.roblox.com/asset/?id=16105870086" -- first face after touch
+            end
+            task.wait(35)
+            if face then
+                face.Texture = "http://www.roblox.com/asset/?id=13143167095" -- rage face after panic duration
+            end
+        end)
+
+        coroutine.resume(faceCycleCoroutine)
+    end
+
+    for _, part in ipairs(SCP:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.Touched:Connect(function(hit)
+                if hit:IsDescendantOf(Player.Character) then
+                    startFaceCycle()
+                end
+            end)
+        end
+    end
+end
+
+   setupFaceChangeOnTouch(SCP)
+
+local scpStatusGui = Instance.new("ScreenGui")
+scpStatusGui.Name = "SCPStatusGui"
+scpStatusGui.ResetOnSpawn = false
+scpStatusGui.Parent = PlayerGui
+
+local statusFrame = Instance.new("Frame")
+statusFrame.Size = UDim2.new(0, 150, 0, 80)
+statusFrame.Position = UDim2.new(0, 20, 0, 20)
+statusFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+statusFrame.BackgroundTransparency = 0.5
+statusFrame.BorderSizePixel = 0
+statusFrame.Parent = scpStatusGui
+
+local statusText = Instance.new("TextLabel")
+statusText.Text = "SCP 状态:"
+statusText.Size = UDim2.new(1, 0, 0, 30)
+statusText.BackgroundTransparency = 1
+statusText.TextColor3 = Color3.new(1, 1, 1)
+statusText.Font = Enum.Font.SourceSansBold
+statusText.TextSize = 18
+statusText.Parent = statusFrame
+
+local faceImage = Instance.new("ImageLabel")
+faceImage.Size = UDim2.new(0, 60, 0, 60)
+faceImage.Position = UDim2.new(0.5, -30, 0, 30)
+faceImage.BackgroundTransparency = 1
+faceImage.Parent = statusFrame
+
+local facePart = SCP:FindFirstChild("facepart")
+local faceDecal = facePart and facePart:FindFirstChild("face")
+
+if faceDecal then
+    faceImage.Image = faceDecal.Texture
+end
+
+if faceDecal then
+    faceDecal.Changed:Connect(function(property)
+        if property == "Texture" then
+            faceImage.Image = faceDecal.Texture
+        end
+    end)
+end
+
+    local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+    SCP:PivotTo(HumanoidRootPart.CFrame * CFrame.new(0, 0, -30))
+
+    if not SCP:FindFirstChildOfClass("Highlight") then
+        local hl = Instance.new("Highlight")
+        hl.Adornee = SCP
+        hl.FillColor = Color3.fromRGB(255, 0, 0)
+        hl.FillTransparency = 0.5
+        hl.OutlineColor = Color3.new(1, 1, 1)
+        hl.Parent = SCP
+    end
+
+    local function makeSoundsGlobal()
+        local head = SCP:FindFirstChild("Head")
+        if not head then return end
+        for _, s in ipairs(head:GetDescendants()) do
+            if s:IsA("Sound") then
+                s.RollOffMode = Enum.RollOffMode.Linear
+                s.RollOffMaxDistance = 999999
+                s.RollOffMinDistance = 0
+                s.Volume = 5
+            end
+        end
+    end
+    makeSoundsGlobal()
+
+    local cc = Lighting:FindFirstChild("SCPRedTint") or Instance.new("ColorCorrectionEffect")
+    cc.Name = "SCPRedTint"
+    cc.TintColor = Color3.new(1, 1, 1)
+    cc.Parent = Lighting
+
+    local function shakeCamera(duration)
+        local startTime = tick()
+        local conn
+        conn = RunService.RenderStepped:Connect(function()
+            local elapsed = tick() - startTime
+            if elapsed > duration then
+                conn:Disconnect()
+                return
+            end
+            local magnitude = 0.6
+            local offset = Vector3.new(
+                (math.random() - 0.5) * magnitude,
+                (math.random() - 0.5) * magnitude,
+                0
+            )
+            Camera.CFrame = Camera.CFrame * CFrame.new(offset)
+        end)
+    end
+
+    local function fadeToRed(duration)
+        local startTime = tick()
+        local conn
+        conn = RunService.RenderStepped:Connect(function()
+            local elapsed = tick() - startTime
+            local alpha = math.clamp(elapsed / duration, 0, 1)
+            cc.TintColor = Color3.new(1, 1 - alpha, 1 - alpha)
+            if alpha >= 1 then
+                conn:Disconnect()
+            end
+        end)
+    end
+
+    local function lockFirstPerson(enable)
+    if enable then
+        Player.CameraMode = Enum.CameraMode.LockFirstPerson
+    else
+        Player.CameraMode = Enum.CameraMode.Classic
+    end
+end
+
+    local panic = false
+
+    local breakSoundId = 6629890936
+    local breakSound = Instance.new("Sound")
+    breakSound.SoundId = "rbxassetid://" .. breakSoundId
+    breakSound.Volume = 1
+    breakSound.Parent = SCP.PrimaryPart or SCP:FindFirstChildWhichIsA("BasePart")
+
+   local function triggerPanic()
+    if panic then return end
+    panic = true
+
+    fadeToRed(20)
+    shakeCamera(35)
+    lockFirstPerson(true)
+end
+
+local function resetPanic()
+    panic = false
+    lockFirstPerson(false)
+    cc.TintColor = Color3.new(1, 1, 1)
+end
+
+    local function setupTouchTrigger()
+        local humanoid = Character:WaitForChild("Humanoid")
+        for _, part in ipairs(SCP:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.Touched:Connect(function(hit)
+                    if hit:IsDescendantOf(Character) then
+                        triggerPanic()
+                    end
+                end)
+            end
+        end
+        humanoid.Died:Connect(resetPanic)
+    end
+    setupTouchTrigger()
+
+local breakDuration = 5
+
+breakSound.Parent = SCP.PrimaryPart or SCP:FindFirstChildWhichIsA("BasePart")
+
+RunService.Heartbeat:Connect(function()
+    if not panic then return end
+
+    local rootPart = SCP.PrimaryPart or SCP:FindFirstChildWhichIsA("BasePart")
+    if not rootPart then return end
+
+    local touchingParts = workspace:GetPartsInPart(rootPart)
+    for _, part in ipairs(touchingParts) do
+        if part.CanCollide and part.Transparency < 1 and part ~= rootPart then
+            if part:IsDescendantOf(SCP) then
+                continue
+            end
+
+            if part.Anchored and (
+                part.Size.X >= 80 or
+                part.Size.Y >= 80 or
+                part.Size.Z >= 80
+            ) then
+                continue
+            end
+
+            breakSound:Play()
+            part.Transparency = 1
+            part.CanCollide = false
+            task.delay(breakDuration, function()
+                if part and part.Parent then
+                    part.Transparency = 0
+                    part.CanCollide = true
+                end
+            end)
+        end
+    end
+end)
+
+    RunService.Heartbeat:Connect(breakWall)
+
+    Player.CharacterAdded:Connect(function(char)
+        Character = char
+        setupTouchTrigger()
+        resetPanic()
+    end)
+end
+
+executeBtn.MouseButton1Click:Connect(runSCP)
+
+noBtn.MouseButton1Click:Connect(function()
+    warningGui:Destroy()
+end)
