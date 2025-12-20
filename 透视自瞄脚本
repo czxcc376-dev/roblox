@@ -1,0 +1,719 @@
+local MAIN_GUI = "FLICK_MOBILE_FIXED"
+local p = game:GetService("Players").LocalPlayer
+local pGui = p:WaitForChild("PlayerGui")
+local RunService = game:GetService("RunService")
+local camera = workspace.CurrentCamera
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+-- 清理旧GUI
+pcall(function()
+    for _, gui in pairs(pGui:GetChildren()) do
+        if gui.Name:find("FLICK") or gui.Name:find("Flick") then
+            gui:Destroy()
+        end
+    end
+end)
+
+-- 状态变量
+local settings = {
+    esp = false,
+    autoAim = false,
+    fovCircle = true,
+    fovSize = 120,
+    aimSpeed = 5,
+    aimPart = "头部"
+}
+
+local espObjects = {} -- 结构：[player] = {highlight, billboard, humanoidConn, charConn}
+local aimConnection = nil
+local fovCircle = nil
+local espRefreshConn = nil -- ESP全局刷新连接
+
+-- ==================== FOV 圆圈 ====================
+local function createFOVCircle()
+    if fovCircle then
+        pcall(function() fovCircle:Destroy() end)
+    end
+    
+    local circle = Instance.new("Frame")
+    circle.Name = "FOVCircle"
+    circle.AnchorPoint = Vector2.new(0.5, 0.5)
+    circle.Size = UDim2.new(0, settings.fovSize * 2, 0, settings.fovSize * 2)
+    circle.Position = UDim2.new(0.5, 0, 0.5, 0)
+    circle.BackgroundTransparency = 1
+    circle.BorderSizePixel = 0
+    circle.ZIndex = 10
+    
+    local corner = Instance.new("UICorner", circle)
+    corner.CornerRadius = UDim.new(1, 0)
+    
+    local stroke = Instance.new("UIStroke", circle)
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Thickness = 2
+    stroke.Transparency = 0.5
+    
+    local centerDot = Instance.new("Frame", circle)
+    centerDot.AnchorPoint = Vector2.new(0.5, 0.5)
+    centerDot.Size = UDim2.new(0, 4, 0, 4)
+    centerDot.Position = UDim2.new(0.5, 0, 0.5, 0)
+    centerDot.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    centerDot.BorderSizePixel = 0
+    centerDot.ZIndex = 11
+    
+    local dotCorner = Instance.new("UICorner", centerDot)
+    dotCorner.CornerRadius = UDim.new(1, 0)
+    
+    fovCircle = circle
+    
+    local circleGui = Instance.new("ScreenGui", pGui)
+    circleGui.Name = "FOVCircleGui"
+    circleGui.ResetOnSpawn = false
+    circleGui.IgnoreGuiInset = true
+    circle.Parent = circleGui
+    
+    return circle
+end
+
+-- ==================== ESP 核心修复逻辑 ====================
+local function removeESP(player)
+    if not espObjects[player] then return end
+    
+    -- 断开所有事件连接
+    if espObjects[player].humanoidConn then
+        espObjects[player].humanoidConn:Disconnect()
+    end
+    if espObjects[player].charConn then
+        espObjects[player].charConn:Disconnect()
+    end
+    
+    -- 销毁ESP对象
+    pcall(function()
+        if espObjects[player].highlight then
+            espObjects[player].highlight:Destroy()
+        end
+        if espObjects[player].billboard then
+            espObjects[player].billboard:Destroy()
+        end
+    end)
+    
+    espObjects[player] = nil
+end
+
+local function createESP(player)
+    if player == p or not settings.esp or espObjects[player] then return end
+    if not player.Character then return end
+
+    -- 等待角色核心部件加载（兼容R6/R15）
+    local char = player.Character
+    local humanoid = char:WaitForChild("Humanoid", 5)
+    local rootPart = char:WaitForChild("HumanoidRootPart", 5)
+    local head = char:WaitForChild("Head", 5)
+    
+    if not humanoid or not rootPart or not head or humanoid.Health <= 0 then
+        task.delay(1, createESP, player) -- 1秒后重试
+        return
+    end
+
+    -- 初始化ESP对象容器
+    espObjects[player] = {}
+
+    -- 1. 创建高亮（强制置顶）
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "PlayerESP_Highlight"
+    highlight.Parent = char
+    highlight.FillColor = Color3.fromRGB(255, 0, 0)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
+    highlight.FillTransparency = 0.75
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- 强制显示在最上层
+    highlight.Adornee = char
+    espObjects[player].highlight = highlight
+
+    -- 2. 创建信息面板（无黑底+适配显示）
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "PlayerESP_Billboard"
+    billboard.Parent = rootPart
+    billboard.Size = UDim2.new(0, 80, 0, 35)
+    billboard.StudsOffset = Vector3.new(0, 3.5, 0) -- 提高偏移避免被模型遮挡
+    billboard.AlwaysOnTop = true
+    billboard.MaxDistance = 1000 -- 扩大显示距离
+    billboard.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    espObjects[player].billboard = billboard
+
+    -- 面板内容
+    local container = Instance.new("Frame", billboard)
+    container.Size = UDim2.new(1, 0, 1, 0)
+    container.BackgroundTransparency = 1
+
+    -- 玩家名
+    local nameLabel = Instance.new("TextLabel", container)
+    nameLabel.Size = UDim2.new(1, 0, 0.4, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 9
+    nameLabel.Text = player.Name
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nameLabel.TextScaled = false
+
+    -- 距离
+    local distLabel = Instance.new("TextLabel", container)
+    distLabel.Size = UDim2.new(1, 0, 0.3, 0)
+    distLabel.Position = UDim2.new(0, 0, 0.4, 0)
+    distLabel.BackgroundTransparency = 1
+    distLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+    distLabel.Font = Enum.Font.Gotham
+    distLabel.TextSize = 8
+    distLabel.Text = "0m"
+    distLabel.TextStrokeTransparency = 0
+    distLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+
+    -- 血量
+    local healthLabel = Instance.new("TextLabel", container)
+    healthLabel.Size = UDim2.new(1, 0, 0.3, 0)
+    healthLabel.Position = UDim2.new(0, 0, 0.7, 0)
+    healthLabel.BackgroundTransparency = 1
+    healthLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+    healthLabel.Font = Enum.Font.Gotham
+    healthLabel.TextSize = 8
+    healthLabel.Text = string.format("%d HP", humanoid.Health)
+    healthLabel.TextStrokeTransparency = 0
+    healthLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+
+    -- 3. 监听人类oid死亡事件
+    local humanoidConn = humanoid.Died:Connect(function()
+        removeESP(player)
+    end)
+    espObjects[player].humanoidConn = humanoidConn
+
+    -- 4. 监听角色重生事件
+    local charConn = player.CharacterAdded:Connect(function(newChar)
+        removeESP(player)
+        task.wait(1) -- 等待新角色加载
+        if settings.esp then
+            createESP(player)
+        end
+    end)
+    espObjects[player].charConn = charConn
+
+    -- 5. 定时更新ESP信息（避免单次更新失效）
+    task.spawn(function()
+        while settings.esp and espObjects[player] and player.Character do
+            pcall(function()
+                local myRoot = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+                if not myRoot then return end
+
+                -- 更新距离
+                local distance = math.floor((rootPart.Position - myRoot.Position).Magnitude)
+                distLabel.Text = string.format("%dm", distance)
+
+                -- 更新血量和颜色
+                local health = math.floor(humanoid.Health)
+                healthLabel.Text = string.format("%d HP", health)
+                if health > 70 then
+                    healthLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+                elseif health > 30 then
+                    healthLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+                else
+                    healthLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+                end
+
+                -- 更新高亮颜色（按距离）
+                if distance < 50 then
+                    highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                elseif distance < 150 then
+                    highlight.FillColor = Color3.fromRGB(255, 150, 0)
+                else
+                    highlight.FillColor = Color3.fromRGB(255, 255, 0)
+                end
+            end)
+            task.wait(0.1) -- 高频更新确保信息同步
+        end
+    end)
+end
+
+-- 全局ESP刷新：每秒检查所有玩家ESP状态，缺失则重建
+local function startESPRefresh()
+    if espRefreshConn then
+        espRefreshConn:Disconnect()
+    end
+
+    espRefreshConn = RunService.Heartbeat:Connect(function()
+        if not settings.esp then return end
+
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= p and player.Character and not espObjects[player] then
+                createESP(player)
+            end
+        end
+    end)
+end
+
+local function toggleESP(state)
+    settings.esp = state
+
+    -- 关闭ESP：清理所有对象+断开刷新
+    if not state then
+        if espRefreshConn then
+            espRefreshConn:Disconnect()
+            espRefreshConn = nil
+        end
+        for player, _ in pairs(espObjects) do
+            removeESP(player)
+        end
+        return
+    end
+
+    -- 开启ESP：创建所有玩家ESP+启动全局刷新
+    startESPRefresh()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= p then
+            task.spawn(createESP, player)
+        end
+    end
+end
+
+-- ==================== 自动瞄准（不变）====================
+local function getAimTargetPart(char)
+    if settings.aimPart == "头部" then
+        return char:FindFirstChild("Head")
+    elseif settings.aimPart == "脖子" then
+        local upperTorso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+        if upperTorso then
+            return upperTorso, Vector3.new(0, 0.5, 0)
+        end
+        return char:FindFirstChild("Head")
+    elseif settings.aimPart == "胸部" then
+        return char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+    end
+    return char:FindFirstChild("Head")
+end
+
+local function getClosestEnemy()
+    local closestPlayer = nil
+    local closestDist = math.huge
+    local myChar = p.Character
+    
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
+    
+    local myRoot = myChar.HumanoidRootPart
+    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= p then
+            local char = player.Character
+            if not char then continue end
+
+            local aimPart, offset = getAimTargetPart(char)
+            local humanoid = char:FindFirstChild("Humanoid")
+            
+            if not aimPart or not humanoid or humanoid.Health <= 0 then
+                continue
+            end
+
+            local targetPos = aimPart.Position
+            if offset then
+                targetPos = targetPos + offset
+            end
+
+            local distance = (targetPos - myRoot.Position).Magnitude
+            if distance > 300 then
+                continue
+            end
+
+            local screenPos, onScreen = camera:WorldToViewportPoint(targetPos)
+            if not onScreen then
+                continue
+            end
+
+            local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+            if screenDist > settings.fovSize then
+                continue
+            end
+
+            -- 掩体判断
+            local rayOrigin = camera.CFrame.Position
+            local rayDirection = (targetPos - rayOrigin).Unit * 300
+            local raycastParams = RaycastParams.new()
+            raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+            raycastParams.FilterDescendantsInstances = {p.Character, camera}
+            raycastParams.IgnoreWater = true
+            
+            local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+            if raycastResult and raycastResult.Instance:IsDescendantOf(char) then
+                if screenDist < closestDist then
+                    closestDist = screenDist
+                    closestPlayer = {player = player, targetPos = targetPos}
+                end
+            end
+        end
+    end
+    
+    return closestPlayer
+end
+
+local function toggleAutoAim(state)
+    settings.autoAim = state
+    
+    if aimConnection then
+        aimConnection:Disconnect()
+        aimConnection = nil
+    end
+    
+    if not state then
+        if fovCircle then
+            local centerDot = fovCircle:FindFirstChild("Frame")
+            if centerDot then
+                centerDot.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+                centerDot.Size = UDim2.new(0, 4, 0, 4)
+            end
+        end
+        return
+    end
+    
+    aimConnection = RunService.RenderStepped:Connect(function()
+        local targetData = getClosestEnemy()
+        
+        if targetData then
+            local targetPos = targetData.targetPos
+            local camCFrame = camera.CFrame
+            local direction = (targetPos - camCFrame.Position).Unit
+            local newCFrame = CFrame.new(camCFrame.Position, camCFrame.Position + direction)
+            
+            local lerpAmount = settings.aimSpeed / 100
+            camera.CFrame = camCFrame:Lerp(newCFrame, lerpAmount)
+            
+            if fovCircle then
+                local centerDot = fovCircle:FindFirstChild("Frame")
+                if centerDot then
+                    centerDot.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+                    centerDot.Size = UDim2.new(0, 8, 0, 8)
+                end
+            end
+        else
+            if fovCircle then
+                local centerDot = fovCircle:FindFirstChild("Frame")
+                if centerDot then
+                    centerDot.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+                    centerDot.Size = UDim2.new(0, 4, 0, 4)
+                end
+            end
+        end
+    end)
+end
+
+-- 切换瞄准部位
+local function cycleAimPart()
+    local parts = {"头部", "脖子", "胸部"}
+    local currentIndex = table.find(parts, settings.aimPart) or 1
+    local nextIndex = currentIndex % #parts + 1
+    settings.aimPart = parts[nextIndex]
+    return settings.aimPart
+end
+
+-- ==================== UI 系统（修复错位后）====================
+local function applyStyle(obj, radius)
+    local corner = Instance.new("UICorner", obj)
+    corner.CornerRadius = UDim.new(0, radius or 8)
+end
+
+local function createUI()
+    local sg = Instance.new("ScreenGui", pGui)
+    sg.Name = MAIN_GUI
+    sg.ResetOnSpawn = false
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    local main = Instance.new("Frame", sg)
+    main.Size = UDim2.new(0, 180, 0, 390)
+    main.Position = UDim2.new(0, 10, 0.5, -195)
+    main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    main.BackgroundTransparency = 0.1
+    main.BorderSizePixel = 0
+    main.Active = true
+    main.Draggable = true
+    applyStyle(main, 12)
+    
+    local titleBar = Instance.new("Frame", main)
+    titleBar.Size = UDim2.new(1, 0, 0, 35)
+    titleBar.BackgroundColor3 = Color3.fromRGB(25, 30, 40)
+    titleBar.BackgroundTransparency = 0.1
+    titleBar.BorderSizePixel = 0
+    applyStyle(titleBar, 12)
+    
+    local title = Instance.new("TextLabel", titleBar)
+    title.Size = UDim2.new(1, -60, 1, 0)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "🎯 Flick 手机版"
+    title.TextColor3 = Color3.fromRGB(150, 200, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 13
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local minBtn = Instance.new("TextButton", titleBar)
+    minBtn.Size = UDim2.new(0, 30, 0, 35)
+    minBtn.Position = UDim2.new(1, -60, 0, 0)
+    minBtn.BackgroundTransparency = 1
+    minBtn.Text = "—"
+    minBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    minBtn.Font = Enum.Font.GothamBold
+    minBtn.TextSize = 16
+    
+    local closeBtn = Instance.new("TextButton", titleBar)
+    closeBtn.Size = UDim2.new(0, 30, 0, 35)
+    closeBtn.Position = UDim2.new(1, -30, 0, 0)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Text = "×"
+    closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 18
+    
+    local content = Instance.new("Frame", main)
+    content.Name = "Content"
+    content.Size = UDim2.new(1, 0, 1, -35)
+    content.Position = UDim2.new(0, 0, 0, 35)
+    content.BackgroundTransparency = 1
+    
+    local yPos = 10
+    
+    local function addButton(text, icon, callback)
+        local btn = Instance.new("TextButton", content)
+        btn.Size = UDim2.new(1, -20, 0, 42)
+        btn.Position = UDim2.new(0, 10, 0, yPos)
+        btn.BackgroundColor3 = Color3.fromRGB(30, 35, 45)
+        btn.BackgroundTransparency = 0.1
+        btn.TextColor3 = Color3.fromRGB(180, 180, 180)
+        btn.Text = icon .. " " .. text
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 12
+        btn.BorderSizePixel = 0
+        applyStyle(btn, 8)
+        
+        local state = false
+        btn.MouseButton1Click:Connect(function()
+            state = not state
+            callback(state)
+            btn.BackgroundColor3 = state and Color3.fromRGB(50, 150, 200) or Color3.fromRGB(30, 35, 45)
+            btn.TextColor3 = state and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 180)
+            
+            btn:TweenSize(
+                UDim2.new(1, -18, 0, 42),
+                Enum.EasingDirection.Out,
+                Enum.EasingStyle.Back,
+                0.15,
+                true,
+                function()
+                    btn:TweenSize(UDim2.new(1, -20, 0, 42), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.15, true)
+                end
+            )
+        end)
+        
+        yPos = yPos + 50
+        return btn
+    end
+    
+    addButton("玩家透视", "👁️", toggleESP)
+    addButton("自动瞄准", "🎯", toggleAutoAim)
+    
+    -- 瞄准部位按钮
+    local aimPartBtn = Instance.new("TextButton", content)
+    aimPartBtn.Size = UDim2.new(1, -20, 0, 42)
+    aimPartBtn.Position = UDim2.new(0, 10, 0, yPos)
+    aimPartBtn.BackgroundColor3 = Color3.fromRGB(30, 35, 45)
+    aimPartBtn.BackgroundTransparency = 0.1
+    aimPartBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+    aimPartBtn.Text = "🎯 瞄准部位: " .. settings.aimPart
+    aimPartBtn.Font = Enum.Font.GothamBold
+    aimPartBtn.TextSize = 12
+    aimPartBtn.BorderSizePixel = 0
+    applyStyle(aimPartBtn, 8)
+    
+    aimPartBtn.MouseButton1Click:Connect(function()
+        local newPart = cycleAimPart()
+        aimPartBtn.Text = "🎯 瞄准部位: " .. newPart
+        aimPartBtn:TweenSize(
+            UDim2.new(1, -18, 0, 42),
+            Enum.EasingDirection.Out,
+            Enum.EasingStyle.Back,
+            0.15,
+            true,
+            function()
+                aimPartBtn:TweenSize(UDim2.new(1, -20, 0, 42), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.15, true)
+            end
+        )
+    end)
+    
+    yPos = yPos + 50
+    
+    -- 瞄准范围
+    local fovLabel = Instance.new("TextLabel", content)
+    fovLabel.Size = UDim2.new(1, -20, 0, 25)
+    fovLabel.Position = UDim2.new(0, 10, 0, yPos)
+    fovLabel.BackgroundTransparency = 1
+    fovLabel.Text = "瞄准范围: " .. settings.fovSize
+    fovLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    fovLabel.Font = Enum.Font.Gotham
+    fovLabel.TextSize = 11
+    fovLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    yPos = yPos + 30
+    
+    local fovSlider = Instance.new("TextBox", content)
+    fovSlider.Size = UDim2.new(1, -20, 0, 35)
+    fovSlider.Position = UDim2.new(0, 10, 0, yPos)
+    fovSlider.BackgroundColor3 = Color3.fromRGB(30, 35, 45)
+    fovSlider.BackgroundTransparency = 0.1
+    fovSlider.Text = tostring(settings.fovSize)
+    fovSlider.PlaceholderText = "输入 1-200"
+    fovSlider.TextColor3 = Color3.fromRGB(200, 200, 200)
+    fovSlider.Font = Enum.Font.Gotham
+    fovSlider.TextSize = 12
+    fovSlider.BorderSizePixel = 0
+    applyStyle(fovSlider, 6)
+    
+    fovSlider.FocusLost:Connect(function()
+        local num = tonumber(fovSlider.Text)
+        if num and num >= 1 and num <= 200 then
+            settings.fovSize = num
+            fovLabel.Text = "瞄准范围: " .. num
+            if fovCircle then
+                fovCircle.Size = UDim2.new(0, num * 2, 0, num * 2)
+            end
+        else
+            fovSlider.Text = tostring(settings.fovSize)
+        end
+    end)
+    
+    yPos = yPos + 45
+    
+    -- 瞄准速度
+    local speedLabel = Instance.new("TextLabel", content)
+    speedLabel.Size = UDim2.new(1, -20, 0, 25)
+    speedLabel.Position = UDim2.new(0, 10, 0, yPos)
+    speedLabel.BackgroundTransparency = 1
+    speedLabel.Text = "瞄准速度: " .. settings.aimSpeed
+    speedLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    speedLabel.Font = Enum.Font.Gotham
+    speedLabel.TextSize = 11
+    speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    yPos = yPos + 30
+    
+    local speedSlider = Instance.new("TextBox", content)
+    speedSlider.Size = UDim2.new(1, -20, 0, 35)
+    speedSlider.Position = UDim2.new(0, 10, 0, yPos)
+    speedSlider.BackgroundColor3 = Color3.fromRGB(30, 35, 45)
+    speedSlider.BackgroundTransparency = 0.1
+    speedSlider.Text = tostring(settings.aimSpeed)
+    speedSlider.PlaceholderText = "输入 1-30"
+    speedSlider.TextColor3 = Color3.fromRGB(200, 200, 200)
+    speedSlider.Font = Enum.Font.Gotham
+    speedSlider.TextSize = 12
+    speedSlider.BorderSizePixel = 0
+    applyStyle(speedSlider, 6)
+    
+    speedSlider.FocusLost:Connect(function()
+        local num = tonumber(speedSlider.Text)
+        if num and num >= 1 and num <= 30 then
+            settings.aimSpeed = num
+            speedLabel.Text = "瞄准速度: " .. num
+        else
+            speedSlider.Text = tostring(settings.aimSpeed)
+        end
+    end)
+    
+    -- 最小化/关闭
+    minBtn.MouseButton1Click:Connect(function()
+        content.Visible = not content.Visible
+        main:TweenSize(
+            content.Visible and UDim2.new(0, 180, 0, 390) or UDim2.new(0, 180, 0, 35),
+            Enum.EasingDirection.Out,
+            Enum.EasingStyle.Quad,
+            0.25,
+            true
+        )
+        minBtn.Text = content.Visible and "—" or "+"
+    end)
+    
+    closeBtn.MouseButton1Click:Connect(function()
+        toggleESP(false)
+        toggleAutoAim(false)
+        if fovCircle then fovCircle.Parent:Destroy() end
+        sg:Destroy()
+    end)
+end
+
+-- ==================== 启动 ====================
+createFOVCircle()
+createUI()
+
+-- 玩家加入/离开监听
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function()
+        task.wait(1)
+        if settings.esp then
+            createESP(player)
+        end
+    end)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    removeESP(player)
+end)
+
+-- 本地玩家重生
+p.CharacterAdded:Connect(function()
+    task.wait(1)
+    if settings.esp then
+        toggleESP(false)
+        task.wait(0.1)
+        toggleESP(true)
+    end
+end)
+
+-- 启动通知
+task.delay(0.5, function()
+    local notif = Instance.new("ScreenGui", pGui)
+    notif.Name = "StartNotif"
+    notif.ResetOnSpawn = false
+    
+    local frame = Instance.new("Frame", notif)
+    frame.Size = UDim2.new(0, 280, 0, 90)
+    frame.Position = UDim2.new(0.5, -140, 0, -100)
+    frame.BackgroundColor3 = Color3.fromRGB(50, 150, 200)
+    frame.BorderSizePixel = 0
+    applyStyle(frame, 10)
+    
+    local text = Instance.new("TextLabel", frame)
+    text.Size = UDim2.new(1, -20, 1, -20)
+    text.Position = UDim2.new(0, 10, 0, 10)
+    text.BackgroundTransparency = 1
+    text.Text = "✅ Flick 修复版已加载！\n\n✔️ 修复ESP时显时隐\n✔️ 兼容R6/R15角色\n✔️ 全局ESP自动刷新\n✔️ 扩大ESP显示距离"
+    text.TextColor3 = Color3.new(1, 1, 1)
+    text.Font = Enum.Font.GothamBold
+    text.TextSize = 11
+    
+    frame:TweenPosition(
+        UDim2.new(0.5, -140, 0, 20),
+        Enum.EasingDirection.Out,
+        Enum.EasingStyle.Back,
+        0.5,
+        true
+    )
+    
+    task.wait(5)
+    frame:TweenPosition(
+        UDim2.new(0.5, -140, 0, -100),
+        Enum.EasingDirection.In,
+        Enum.EasingStyle.Quad,
+        0.3,
+        true,
+        function()
+            notif:Destroy()
+        end
+    )
+end)
